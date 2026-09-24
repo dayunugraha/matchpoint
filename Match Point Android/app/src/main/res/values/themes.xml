@@ -1,0 +1,14 @@
+<resources>
+    <!-- Dark-only by design, matching the iOS app's dark-only theme.
+
+         Also configures the platform SplashScreen (API 31+, native attributes since
+         minSdk already exceeds 31 — no androidx.core.splashscreen compat needed): a solid
+         fill matching our own Compose SplashScreen's background top color, with an
+         invisible/transparent icon and zero hold time, so cold start goes straight into our
+         own animated splash instead of flashing a separate centered system icon first. -->
+    <style name="Theme.MatchPoint" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowSplashScreenBackground">#852F21</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="android:windowSplashScreenAnimationDuration">0</item>
+    </style>
+</resources>

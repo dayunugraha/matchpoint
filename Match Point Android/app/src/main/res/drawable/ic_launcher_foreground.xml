@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- No separate foreground art — the wordmark is baked into ic_launcher_background (the
+     same square icon image used on iOS), so this layer stays empty and the system's own
+     adaptive-icon mask does the corner rounding, mirroring how iOS presents the icon. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="@android:color/transparent" />
+</shape>

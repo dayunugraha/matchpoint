@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Solid fill (sampled from the wordmark art's own edge tone) behind an inset copy of the
+     iOS app icon art, so the wordmark reads a bit smaller/padded within the adaptive icon's
+     108dp canvas instead of running edge-to-edge. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#B3460B" />
+        </shape>
+    </item>
+    <item
+        android:left="16dp"
+        android:top="16dp"
+        android:right="16dp"
+        android:bottom="16dp">
+        <bitmap
+            android:src="@drawable/ic_launcher_wordmark"
+            android:gravity="fill" />
+    </item>
+</layer-list>

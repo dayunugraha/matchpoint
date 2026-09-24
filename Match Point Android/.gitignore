@@ -1,0 +1,21 @@
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+/app/build
+
+# Release signing — never commit
+/keystore/
+keystore.properties
+
+# Huawei AppGallery Connect config — project-specific credentials
+/app/agconnect-services.json
+
+# Kotlin compiler/build cache
+.kotlin/
