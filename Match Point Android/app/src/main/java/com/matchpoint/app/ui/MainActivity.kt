@@ -13,15 +13,19 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.matchpoint.app.ui.match.MixioRemoteInput
 import com.matchpoint.app.ui.match.VolumeKeyBridge
 import com.matchpoint.app.ui.navigation.RootNavGraph
+import com.matchpoint.app.ui.registration.RegistrationScreen
+import com.matchpoint.app.ui.registration.RegistrationViewModel
 import com.matchpoint.app.ui.splash.SplashScreen
 import com.matchpoint.app.ui.theme.MatchPointTheme
 import com.matchpoint.app.ui.theme.ThemedScreenBackground
@@ -40,14 +44,29 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             MatchPointTheme(preferences = container.preferences) {
+                val isRegistered by container.registrationRepository.isRegistered.collectAsState()
+
+                // Registered-user startup check only — never re-runs per screen. Confirms the
+                // session is still valid and refreshes this installation's last_seen_at/app
+                // version once per app start.
+                LaunchedEffect(isRegistered) {
+                    if (isRegistered) container.registrationRepository.ensureSessionAndTouchInstallation()
+                }
+
                 ThemedScreenBackground {
                     Box(modifier = Modifier.fillMaxSize()) {
-                        RootNavGraph(
-                            repository = container.repository,
-                            preferences = container.preferences,
-                            backupService = container.backupService,
-                            wearEngineManager = container.wearEngineManager
-                        )
+                        if (isRegistered) {
+                            RootNavGraph(
+                                repository = container.repository,
+                                preferences = container.preferences,
+                                backupService = container.backupService,
+                                wearEngineManager = container.wearEngineManager
+                            )
+                        } else {
+                            val registrationViewModel: RegistrationViewModel =
+                                viewModel(factory = RegistrationViewModel.Factory(container.registrationRepository))
+                            RegistrationScreen(viewModel = registrationViewModel)
+                        }
                         SplashOverlay()
                     }
                 }

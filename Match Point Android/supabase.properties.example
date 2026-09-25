@@ -1,0 +1,5 @@
+# Copy this file to supabase.properties (gitignored) and fill in your project's values.
+# Only the project URL and the anon/publishable key belong here — never the service-role
+# key, the database password, or any other secret.
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-anon-public-key

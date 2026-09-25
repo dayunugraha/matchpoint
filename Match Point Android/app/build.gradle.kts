@@ -5,6 +5,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
+    id("org.jetbrains.kotlin.plugin.serialization")
 }
 
 apply(plugin = "com.huawei.agconnect")
@@ -12,6 +13,13 @@ apply(plugin = "com.huawei.agconnect")
 // Release signing — keystore.properties is gitignored; not present in fresh clones.
 val keystoreProperties = Properties().apply {
     val file = rootProject.file("keystore.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+
+// Supabase project URL + anon key — supabase.properties is gitignored; see
+// supabase.properties.example. Never the service-role key or DB password.
+val supabaseProperties = Properties().apply {
+    val file = rootProject.file("supabase.properties")
     if (file.exists()) file.inputStream().use { load(it) }
 }
 
@@ -25,6 +33,9 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
+
+        buildConfigField("String", "SUPABASE_URL", "\"${supabaseProperties.getProperty("SUPABASE_URL", "")}\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"${supabaseProperties.getProperty("SUPABASE_ANON_KEY", "")}\"")
     }
 
     signingConfigs {
@@ -58,6 +69,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -91,6 +103,18 @@ dependencies {
     // Huawei Watch GT 4 remote-controller support — see wear/README.md for AppGallery
     // Connect setup this needs before it can reach a real device.
     implementation("com.huawei.hms:wearengine:5.0.1.302")
+
+    // Supabase backend foundation (installation tracking / release checks / future user
+    // registration — never match/session/player data, that stays local-first in Room).
+    // Pinned to 3.0.0: the newest stable supabase-kt release still built against Kotlin
+    // 2.0.20 — every release after 3.0.3 moved to Kotlin 2.1.0+, which this project isn't on.
+    implementation(platform("io.github.jan-tennert.supabase:bom:3.0.0"))
+    implementation("io.github.jan-tennert.supabase:auth-kt")
+    implementation("io.github.jan-tennert.supabase:postgrest-kt")
+    implementation("io.ktor:ktor-client-cio:3.0.0")
+    // For the users/installations DTOs postgrest-kt serializes — required wherever a module
+    // declares its own @Serializable classes, not just inside the Supabase library itself.
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
 
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")

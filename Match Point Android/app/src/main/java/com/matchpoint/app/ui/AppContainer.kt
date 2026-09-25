@@ -2,6 +2,9 @@ package com.matchpoint.app.ui
 
 import android.content.Context
 import com.matchpoint.app.audio.SoundManager
+import com.matchpoint.app.backend.InstallationTracker
+import com.matchpoint.app.backend.RegistrationRepository
+import com.matchpoint.app.backend.SupabaseBackend
 import com.matchpoint.app.backup.BackupService
 import com.matchpoint.app.data.AppDatabase
 import com.matchpoint.app.data.AppPreferences
@@ -14,6 +17,14 @@ class AppContainer(context: Context) {
     val preferences: AppPreferences = AppPreferences(context)
     val backupService: BackupService = BackupService(AppDatabase.get(context))
     val wearEngineManager: WearEngineManager = WearEngineManager(context)
+
+    // Backend/release service layer — independent of the local-first Room data above; only
+    // ever writes to users/installations, never Room. Constructed eagerly (no network I/O
+    // yet), same as everything else here — actual calls only happen from RegistrationRepository
+    // and MainActivity's post-registration "touch" effect, never per-screen.
+    val supabaseBackend: SupabaseBackend = SupabaseBackend()
+    val installationTracker: InstallationTracker = InstallationTracker(context, supabaseBackend)
+    val registrationRepository: RegistrationRepository = RegistrationRepository(context, supabaseBackend, installationTracker)
 
     init {
         SoundManager.init(context, preferences)

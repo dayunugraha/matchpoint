@@ -19,3 +19,6 @@ keystore.properties
 
 # Kotlin compiler/build cache
 .kotlin/
+
+# Supabase project URL + anon key — local-only, see supabase.properties.example
+supabase.properties
