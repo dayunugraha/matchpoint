@@ -31,8 +31,8 @@ android {
         applicationId = "com.matchpoint.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
 
         buildConfigField("String", "SUPABASE_URL", "\"${supabaseProperties.getProperty("SUPABASE_URL", "")}\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"${supabaseProperties.getProperty("SUPABASE_ANON_KEY", "")}\"")

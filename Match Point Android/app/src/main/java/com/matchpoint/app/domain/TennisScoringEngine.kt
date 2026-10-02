@@ -128,17 +128,17 @@ object TennisScoringEngine {
         val starterSide = if (starterOnSideA) config.sideAPlayers else config.sideBPlayers
         val otherSide = if (starterOnSideA) config.sideBPlayers else config.sideAPlayers
 
+        // Defensive against malformed configs (e.g. a side momentarily short a player during an
+        // edit) — state() is on the hot reactive path for every score/participant change, so it
+        // must never throw; better to degrade the serve order than crash the whole app.
         return when (config.type) {
-            MatchType.SINGLES -> listOf(starter, otherSide.first().id)
-            MatchType.DOUBLES -> {
-                val starterPartner = starterSide.first { it.id != starter }
-                listOf(
-                    starter,
-                    otherSide[0].id,
-                    starterPartner.id,
-                    otherSide[1].id
-                )
-            }
+            MatchType.SINGLES -> listOfNotNull(starter, otherSide.firstOrNull()?.id)
+            MatchType.DOUBLES -> listOfNotNull(
+                starter,
+                otherSide.getOrNull(0)?.id,
+                starterSide.firstOrNull { it.id != starter }?.id,
+                otherSide.getOrNull(1)?.id
+            )
         }
     }
 

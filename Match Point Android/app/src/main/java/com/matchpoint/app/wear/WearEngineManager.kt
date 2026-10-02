@@ -218,12 +218,15 @@ class WearEngineManager(context: Context) {
         // timestamp locally so upgrading the wire format later (command id + ack) won't
         // require touching any of the call sites that consume ReceivedCommand.
         val raw = String(message.data, Charsets.UTF_8).trim()
-        val command = RemoteCommand.fromWireValue(raw)
+        Log.d(TAG, "Received from watch: \"$raw\"")
+        // Wire format: COMMAND or COMMAND|argument (only SOUND_FX_PLAY has an argument).
+        val parts = raw.split("|", limit = 2)
+        val command = RemoteCommand.fromWireValue(parts[0])
         if (command == null) {
             Log.w(TAG, "Ignoring unrecognized remote command payload: \"$raw\"")
             return
         }
-        RemoteCommandHandler.handle(command)
+        RemoteCommandHandler.handle(command, parts.getOrNull(1))
         if (command == RemoteCommand.PING) sendToWatch(WatchEvent.Pong.encode())
         // No live match screen is open, so nothing answered the sync: tell the watch there is
         // no match to show.
@@ -247,10 +250,9 @@ class WearEngineManager(context: Context) {
             WearConnectionState.ERROR
         )
 
-        // TODO(wear-setup): replace with the Lite Wearable app's real package name and
-        // signing certificate fingerprint once it's registered in AppGallery Connect.
-        // See wear/README.md for where these come from.
+        // Watch app fingerprint: <bundleName>_<base64 raw EC public key of the watch's signing
+        // certificate> (from "Match Point Watch Debug.cer"). A release watch cert needs a new value.
         private const val WATCH_APP_PACKAGE_NAME = "com.matchpoint.watch"
-        private const val WATCH_APP_FINGERPRINT = "com.matchpoint.watch_MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAEWidkGnDSOw3/HE2y2GHl+fpWBIa5S+IlnNrsGUvwC1I2QWvtqCHWmwFlFK95zKXiM8s9yV3VVXh7ivN8ZJO3SC5N1TCrvB2lpHMBwcz4DA0kgHCMm/wDec6kOHx1xvCR"
+        private const val WATCH_APP_FINGERPRINT = "com.matchpoint.watch_BEI9/vflFOv3czAlgRCumzgAYIXWVnL32/pPIHun4/WAijCljdn7E/3wE+2yXfYamzFsOBKFQHE8OwojtU/ralg="
     }
 }

@@ -60,6 +60,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.matchpoint.app.R
 import com.matchpoint.app.audio.SoundEffects
 import com.matchpoint.app.domain.MatchOutcome
+import com.matchpoint.app.domain.MatchState
 import com.matchpoint.app.domain.PointDisplay
 import com.matchpoint.app.domain.Side
 import com.matchpoint.app.repository.SessionRepository
@@ -167,10 +168,10 @@ fun LiveMatchScreen(
     // Same lifecycle as VolumeKeyBridge above: only this screen acts on watch remote
     // commands, and only while it's on screen. Every callback calls into the existing
     // ViewModel; the watch only ever receives state back, it never computes any.
-    // OK isn't bound here — the watch sends SOUND_FX_CONFIRM on this screen.
     val connection by wearEngineManager.connectionState.collectAsState()
     val soundFxIndex by viewModel.selectedSoundFxIndex.collectAsState()
     val currentOnFinished by rememberUpdatedState(onFinished)
+    val currentOnAbandoned by rememberUpdatedState(onAbandoned)
     var finishRequested by remember { mutableStateOf(false) }
 
     DisposableEffect(matchId) {
@@ -179,24 +180,20 @@ fun LiveMatchScreen(
         RemoteCommandHandler.onPointA = { viewModel.recordPoint(Side.A) }
         RemoteCommandHandler.onPointB = { viewModel.recordPoint(Side.B) }
         RemoteCommandHandler.onPrevious = { viewModel.undoLastPoint() }
-        RemoteCommandHandler.onSoundFxPrevious = { viewModel.selectPreviousSoundFx() }
-        RemoteCommandHandler.onSoundFxNext = { viewModel.selectNextSoundFx() }
-        RemoteCommandHandler.onSoundFxConfirm = { viewModel.playSelectedSoundFx() }
+        RemoteCommandHandler.onSoundFxPlay = { index ->
+            WatchSoundEffects.getOrNull(index)?.let { viewModel.playSoundEffect(it.filename) }
+        }
         // The watch just opened and wants everything: resend the full current state.
         RemoteCommandHandler.onSync = {
             wearEngineManager.sendToWatch(WatchEvent.MatchStatus(live = true).encode())
-            viewModel.uiState.value?.score?.let { score ->
-                wearEngineManager.sendToWatch(
-                    WatchEvent.ScoreUpdate(
-                        score.gamesA, score.gamesB, score.gameDisplay.pointsA, score.gameDisplay.pointsB
-                    ).encode()
-                )
+            wearEngineManager.sendToWatch(WatchEvent.SoundFxList(WatchSoundEffects.map { it.title }).encode())
+            viewModel.uiState.value?.let { ui ->
+                wearEngineManager.sendToWatch(WatchEvent.Players(ui.sideANames, ui.sideBNames).encode())
+                wearEngineManager.sendToWatch(ui.score.toWatchEvent().encode())
             }
-            val fx = viewModel.selectedSoundFxIndex.value
-            wearEngineManager.sendToWatch(WatchEvent.SoundFxUpdate(fx, SoundEffects[fx].title).encode())
         }
         // Android decides whether the match may finish (same rule as the on-screen button);
-        // the watch's long press is only a request.
+        // the watch's Finish is only a request. The watch asks its own confirmation first.
         RemoteCommandHandler.onFinishMatch = {
             val ui = viewModel.uiState.value
             val outcome = ui?.score?.outcome
@@ -205,7 +202,10 @@ fun LiveMatchScreen(
                 viewModel.finish {
                     completionSent = true
                     wearEngineManager.sendToWatch(
-                        WatchEvent.MatchComplete(ui.score.gamesA, ui.score.gamesB, outcome.winner).encode()
+                        WatchEvent.MatchComplete(
+                            ui.score.gamesA, ui.score.gamesB, outcome.winner,
+                            if (outcome.winner == Side.A) ui.sideANames else ui.sideBNames
+                        ).encode()
                     )
                     currentOnFinished()
                 }
@@ -213,6 +213,9 @@ fun LiveMatchScreen(
                 wearEngineManager.sendToWatch(WatchEvent.Error("FINISH_NOT_ALLOWED").encode())
             }
         }
+        // Same action as the on-screen Abandon; the watch asks its own confirmation first.
+        // Leaving the screen sends MATCH_STATUS|IDLE (onDispose below).
+        RemoteCommandHandler.onAbandonMatch = { viewModel.abandon { currentOnAbandoned() } }
         onDispose {
             RemoteCommandHandler.clear()
             if (!completionSent) wearEngineManager.sendToWatch(WatchEvent.MatchStatus(live = false).encode())
@@ -220,28 +223,24 @@ fun LiveMatchScreen(
     }
 
     // Push phone state to the watch. Keyed on `connection` so everything is re-sent when the
-    // watch (re)connects. Skipped once finish was requested: completion may reset the
+    // watch (re)connects. Score is skipped once finish was requested: completion may reset the
     // derived score, and the watch should keep showing the final result.
     LaunchedEffect(connection) {
         if (connection == WearConnectionState.CONNECTED) {
             wearEngineManager.sendToWatch(WatchEvent.MatchStatus(live = true).encode())
+            wearEngineManager.sendToWatch(WatchEvent.SoundFxList(WatchSoundEffects.map { it.title }).encode())
+        }
+    }
+    LaunchedEffect(connection, state?.sideANames, state?.sideBNames) {
+        val ui = state
+        if (connection == WearConnectionState.CONNECTED && ui != null) {
+            wearEngineManager.sendToWatch(WatchEvent.Players(ui.sideANames, ui.sideBNames).encode())
         }
     }
     LaunchedEffect(connection, state?.score) {
         val score = state?.score
         if (connection == WearConnectionState.CONNECTED && score != null && !finishRequested) {
-            wearEngineManager.sendToWatch(
-                WatchEvent.ScoreUpdate(
-                    score.gamesA, score.gamesB, score.gameDisplay.pointsA, score.gameDisplay.pointsB
-                ).encode()
-            )
-        }
-    }
-    LaunchedEffect(connection, soundFxIndex) {
-        if (connection == WearConnectionState.CONNECTED) {
-            wearEngineManager.sendToWatch(
-                WatchEvent.SoundFxUpdate(soundFxIndex, SoundEffects[soundFxIndex].title).encode()
-            )
+            wearEngineManager.sendToWatch(score.toWatchEvent().encode())
         }
     }
 
@@ -528,3 +527,13 @@ private fun MixioDialogInterceptor() {
     val view = LocalView.current
     SideEffect { (view.parent as? DialogWindowProvider)?.window?.interceptMixioRemote() }
 }
+
+/** The Sound FX offered on the watch: all of them, in the same order as on the phone. The watch
+ * has [WATCH_SOUND_FX_SLOTS] slots (see live.js on the watch). */
+private const val WATCH_SOUND_FX_SLOTS = 24
+private val WatchSoundEffects = SoundEffects.take(WATCH_SOUND_FX_SLOTS)
+
+private fun MatchState.toWatchEvent() = WatchEvent.ScoreUpdate(
+    gamesA, gamesB, gameDisplay.pointsA, gameDisplay.pointsB,
+    (outcome as? MatchOutcome.Completed)?.winner
+)

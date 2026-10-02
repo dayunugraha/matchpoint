@@ -112,8 +112,7 @@ class LiveMatchViewModel(
         SoundManager.playImmediately(listOf(filename))
     }
 
-    // Sound FX picked from the Huawei Watch. Owned here (not on the watch) so the phone stays
-    // the source of truth; the watch only steps through it and asks for playback.
+    // Sound FX selection stepped through by the MIXIO remote (Left / Right / Heart).
     private val _selectedSoundFxIndex = MutableStateFlow(0)
     val selectedSoundFxIndex: StateFlow<Int> = _selectedSoundFxIndex.asStateFlow()
 

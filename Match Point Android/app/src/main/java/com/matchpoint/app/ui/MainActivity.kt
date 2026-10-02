@@ -1,6 +1,9 @@
 package com.matchpoint.app.ui
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.util.Log
 import android.view.KeyEvent
 import android.view.MotionEvent
 import androidx.activity.ComponentActivity
@@ -17,10 +20,12 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.matchpoint.app.backend.UpdateState
 import com.matchpoint.app.ui.match.MixioRemoteInput
 import com.matchpoint.app.ui.match.VolumeKeyBridge
 import com.matchpoint.app.ui.navigation.RootNavGraph
@@ -29,6 +34,7 @@ import com.matchpoint.app.ui.registration.RegistrationViewModel
 import com.matchpoint.app.ui.splash.SplashScreen
 import com.matchpoint.app.ui.theme.MatchPointTheme
 import com.matchpoint.app.ui.theme.ThemedScreenBackground
+import com.matchpoint.app.ui.update.UpdateDialog
 import kotlinx.coroutines.delay
 import androidx.compose.animation.core.animateFloatAsState
 
@@ -39,18 +45,25 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        container = AppContainer(applicationContext)
+        container = AppContainer.get(applicationContext)
+        container.wearEngineManager.connect() // no-op if already connecting/connected; revives after a finish()
         enableEdgeToEdge()
 
         setContent {
             MatchPointTheme(preferences = container.preferences) {
                 val isRegistered by container.registrationRepository.isRegistered.collectAsState()
+                val updateState by container.releaseRepository.updateState.collectAsState()
 
                 // Registered-user startup check only — never re-runs per screen. Confirms the
-                // session is still valid and refreshes this installation's last_seen_at/app
-                // version once per app start.
+                // session is still valid, refreshes this installation's last_seen_at/app version,
+                // and checks for a newer release once per app start. The release check is
+                // non-critical: a failure just leaves updateState at Error and never blocks the
+                // app below from opening.
                 LaunchedEffect(isRegistered) {
-                    if (isRegistered) container.registrationRepository.ensureSessionAndTouchInstallation()
+                    if (isRegistered) {
+                        container.registrationRepository.ensureSessionAndTouchInstallation()
+                        container.releaseRepository.checkForUpdateOnce()
+                    }
                 }
 
                 ThemedScreenBackground {
@@ -68,6 +81,19 @@ class MainActivity : ComponentActivity() {
                             RegistrationScreen(viewModel = registrationViewModel)
                         }
                         SplashOverlay()
+                    }
+                }
+
+                (updateState as? UpdateState.UpdateAvailable)?.let { available ->
+                    var dismissed by remember(available) { mutableStateOf(false) }
+                    if (!dismissed) {
+                        UpdateDialog(
+                            state = available,
+                            // No in-app download/install: hand the APK link to the system
+                            // browser/download manager. https only, and only on a user tap.
+                            onUpdate = { openApkUrl(available.apkUrl) },
+                            onLater = { dismissed = true }
+                        )
                     }
                 }
             }
@@ -94,6 +120,13 @@ class MainActivity : ComponentActivity() {
     override fun dispatchGenericMotionEvent(ev: MotionEvent): Boolean =
         MixioRemoteInput.handle(ev) || super.dispatchGenericMotionEvent(ev)
 
+    private fun openApkUrl(url: String) {
+        val uri = Uri.parse(url)
+        if (uri.scheme != "https") return
+        runCatching { startActivity(Intent(Intent.ACTION_VIEW, uri)) }
+            .onFailure { Log.w("MainActivity", "No app can open the update link") }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         if (isFinishing) container.wearEngineManager.disconnect()
@@ -104,7 +137,7 @@ class MainActivity : ComponentActivity() {
  * ZStack + .task { sleep(3s) } + .animation(.easeOut(duration: 0.6)) splash handoff. */
 @Composable
 private fun SplashOverlay() {
-    var isShowingSplash by remember { mutableStateOf(true) }
+    var isShowingSplash by rememberSaveable { mutableStateOf(true) }
     val alpha by animateFloatAsState(
         targetValue = if (isShowingSplash) 1f else 0f,
         animationSpec = tween(durationMillis = 600),

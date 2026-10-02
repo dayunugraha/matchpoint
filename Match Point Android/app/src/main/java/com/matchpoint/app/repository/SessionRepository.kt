@@ -13,6 +13,7 @@ import com.matchpoint.app.domain.MatchOutcome
 import com.matchpoint.app.domain.MatchState
 import com.matchpoint.app.domain.MatchStatus
 import com.matchpoint.app.domain.MatchType
+import androidx.room.withTransaction
 import com.matchpoint.app.domain.PairingHistory
 import com.matchpoint.app.domain.PlayerRef
 import com.matchpoint.app.domain.SessionPlayerState
@@ -294,10 +295,14 @@ class SessionRepository(private val db: AppDatabase) {
         val old = participantDao.getForMatch(match.id)
         releaseToAvailable(match.sessionId, old.map { it.playerId })
 
-        participantDao.deleteForMatch(match.id)
-        val entities = sideA.mapIndexed { i, id -> MatchParticipantEntity(UUID.randomUUID(), match.id, id, Side.A, i) } +
-            sideB.mapIndexed { i, id -> MatchParticipantEntity(UUID.randomUUID(), match.id, id, Side.B, i) }
-        participantDao.insertAll(entities)
+        // Delete+insert in one transaction so observers (e.g. live scoring's participant flow)
+        // never see a transient state with a side short a player between the two writes.
+        db.withTransaction {
+            participantDao.deleteForMatch(match.id)
+            val entities = sideA.mapIndexed { i, id -> MatchParticipantEntity(UUID.randomUUID(), match.id, id, Side.A, i) } +
+                sideB.mapIndexed { i, id -> MatchParticipantEntity(UUID.randomUUID(), match.id, id, Side.B, i) }
+            participantDao.insertAll(entities)
+        }
 
         for (id in sideA + sideB) {
             ensureRegistered(match.sessionId, id, SessionPlayerState.PLAYING)

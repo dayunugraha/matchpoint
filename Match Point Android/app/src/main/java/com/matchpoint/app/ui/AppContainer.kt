@@ -4,6 +4,7 @@ import android.content.Context
 import com.matchpoint.app.audio.SoundManager
 import com.matchpoint.app.backend.InstallationTracker
 import com.matchpoint.app.backend.RegistrationRepository
+import com.matchpoint.app.backend.ReleaseRepository
 import com.matchpoint.app.backend.SupabaseBackend
 import com.matchpoint.app.backup.BackupService
 import com.matchpoint.app.data.AppDatabase
@@ -25,6 +26,7 @@ class AppContainer(context: Context) {
     val supabaseBackend: SupabaseBackend = SupabaseBackend()
     val installationTracker: InstallationTracker = InstallationTracker(context, supabaseBackend)
     val registrationRepository: RegistrationRepository = RegistrationRepository(context, supabaseBackend, installationTracker)
+    val releaseRepository: ReleaseRepository = ReleaseRepository(supabaseBackend)
 
     init {
         SoundManager.init(context, preferences)
@@ -33,5 +35,16 @@ class AppContainer(context: Context) {
         // Scoring. RemoteCommandHandler's callbacks are still screen-scoped — see
         // LiveMatchScreen.
         wearEngineManager.connect()
+    }
+
+    companion object {
+        @Volatile private var instance: AppContainer? = null
+
+        /** One container per process: an Activity recreate must not rebuild services (and
+         * re-run Wear Engine connect) — only a real process restart does. */
+        fun get(context: Context): AppContainer =
+            instance ?: synchronized(this) {
+                instance ?: AppContainer(context.applicationContext).also { instance = it }
+            }
     }
 }

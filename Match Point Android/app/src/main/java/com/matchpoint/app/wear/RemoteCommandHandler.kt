@@ -4,9 +4,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-/** One decoded [RemoteCommand] plus the bookkeeping fields the wire protocol will grow into
- * later (command id, acknowledgement) — kept locally now so the debug UI and future
- * duplicate-command protection don't need a protocol change to arrive. */
 data class ReceivedCommand(
     val command: RemoteCommand,
     val timestamp: Long,
@@ -28,11 +25,9 @@ object RemoteCommandHandler {
     var onPointA: (() -> Unit)? = null
     var onPointB: (() -> Unit)? = null
     var onPrevious: (() -> Unit)? = null
-    var onOk: (() -> Unit)? = null
-    var onSoundFxPrevious: (() -> Unit)? = null
-    var onSoundFxNext: (() -> Unit)? = null
-    var onSoundFxConfirm: (() -> Unit)? = null
     var onFinishMatch: (() -> Unit)? = null
+    var onAbandonMatch: (() -> Unit)? = null
+    var onSoundFxPlay: ((Int) -> Unit)? = null
     var onSync: (() -> Unit)? = null
 
     private var sequenceCounter = 0L
@@ -42,7 +37,7 @@ object RemoteCommandHandler {
 
     /** Called by [WearEngineManager] for every command decoded off the wire. Must be called
      * on the main thread — the callbacks it invokes touch ViewModel/Compose state. */
-    fun handle(command: RemoteCommand) {
+    fun handle(command: RemoteCommand, argument: String? = null) {
         sequenceCounter += 1
         _lastReceived.value = ReceivedCommand(command, System.currentTimeMillis(), sequenceCounter)
 
@@ -50,13 +45,11 @@ object RemoteCommandHandler {
             RemoteCommand.POINT_A -> onPointA?.invoke()
             RemoteCommand.POINT_B -> onPointB?.invoke()
             RemoteCommand.PREVIOUS -> onPrevious?.invoke()
-            RemoteCommand.OK -> onOk?.invoke()
-            RemoteCommand.SOUND_FX_PREVIOUS -> onSoundFxPrevious?.invoke()
-            RemoteCommand.SOUND_FX_NEXT -> onSoundFxNext?.invoke()
-            RemoteCommand.SOUND_FX_CONFIRM -> onSoundFxConfirm?.invoke()
             RemoteCommand.FINISH_MATCH -> onFinishMatch?.invoke()
+            RemoteCommand.ABANDON_MATCH -> onAbandonMatch?.invoke()
+            RemoteCommand.SOUND_FX_PLAY -> argument?.toIntOrNull()?.let { onSoundFxPlay?.invoke(it) }
             RemoteCommand.SYNC -> onSync?.invoke()
-            // Debug connectivity test: recorded above, answered by WearEngineManager.
+            // Heartbeat: recorded above, answered by WearEngineManager.
             RemoteCommand.PING -> Unit
         }
     }
@@ -65,11 +58,9 @@ object RemoteCommandHandler {
         onPointA = null
         onPointB = null
         onPrevious = null
-        onOk = null
-        onSoundFxPrevious = null
-        onSoundFxNext = null
-        onSoundFxConfirm = null
         onFinishMatch = null
+        onAbandonMatch = null
+        onSoundFxPlay = null
         onSync = null
     }
 }
